@@ -16,19 +16,7 @@ __global__ void reduce(float *d_input, float *d_output)
     // if(threadIdx.x == 0)
     //     input_begin[threadIdx.x] += input_begin[threadIdx.x + 4];
 
-    // 第一种写法：基指针 + 局部索引（保证每个block都使用从0开始的索引）
-    float *input_begin = d_input + blockDim.x * blockIdx.x;
-    for(int i = 1; i < blockDim.x; i *= 2)
-    {
-        if(threadIdx.x % (i * 2) == 0)
-            input_begin[threadIdx.x] += input_begin[threadIdx.x + i];
-        __syncthreads();
-    }
-
-    if(threadIdx.x == 0)
-        d_output[blockIdx.x] = input_begin[0];
-
-    // // 第二种写法：全局索引直接计算（不推荐，逻辑复杂容易乱）
+    // // 第一种写法：全局索引直接计算（不推荐，逻辑复杂容易乱）
     // int tid = threadIdx.x;
     // int index = blockDim.x * blockIdx.x + tid;
     // for(int i = 1; i < blockDim.x; i *= 2)
@@ -41,6 +29,18 @@ __global__ void reduce(float *d_input, float *d_output)
     // }
     // if(tid == 0)
     //     d_output[blockIdx.x] = d_input[index];
+
+    // 第二种写法：基指针 + 局部索引（保证每个block都使用从0开始的索引）
+    float *input_begin = d_input + blockDim.x * blockIdx.x;
+    for(int i = 1; i < blockDim.x; i *= 2)
+    {
+        if(threadIdx.x % (i * 2) == 0)
+            input_begin[threadIdx.x] += input_begin[threadIdx.x + i];
+        __syncthreads();
+    }
+
+    if(threadIdx.x == 0)
+        d_output[blockIdx.x] = input_begin[0];
 
 }
 
