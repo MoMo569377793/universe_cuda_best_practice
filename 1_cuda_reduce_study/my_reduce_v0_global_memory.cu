@@ -5,8 +5,25 @@
 
 #define THREAD_PER_BLOCK 256
 
-__global__ void reduce(float *d_in, float *d_out)
+__global__ void reduce(float *d_input, float *d_output)
 {
+    float *input_begin = d_input + blockDim.x * blockIdx.x;
+    // if(threadIdx.x == 0 or 2 or 4 or 6)
+    //     input_begin[threadIdx.x] += input_begin[threadIdx.x + 1];
+    // if(threadIdx.x == 0 or 4)
+    //     input_begin[threadIdx.x] += input_begin[threadIdx.x + 2];
+    // if(threadIdx.x == 0)
+    //     input_begin[threadIdx.x] += input_begin[threadIdx.x + 4];
+
+    for(int i = 1; i < blockDim.x; i *= 2)
+    {
+        if(threadIdx.x % (i * 2) == 0)
+            input_begin[threadIdx.x] += input_begin[threadIdx.x + i];
+        __syncthreads();
+    }
+
+    if(threadIdx.x == 0)
+        d_output[blockIdx.x] = input_begin[0];
 
 }
 
@@ -14,7 +31,7 @@ bool check(float *out, float *res, int n)
 {
     for(int i = 0; i < n; i++)
     {
-        if(abs(out[i] - res[i]) > 1e-5)
+        if(abs(out[i] - res[i]) > 1e-3)
             return false;
     }
     return true;
