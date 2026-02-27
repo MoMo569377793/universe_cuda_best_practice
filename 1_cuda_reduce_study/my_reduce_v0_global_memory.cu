@@ -29,7 +29,7 @@ __global__ void reduce(float *d_input, float *d_output)
     // }
 
     // if(tid == 0)
-    //     d_output[blockIdx.x] = d_input[tid + blockDim.x * blockIdx.x];
+    //     d_output[blockIdx.x] = d_input[index];
 
     
     // 第二种写法：基指针 + 局部索引（保证每个block都使用从0开始的索引）
