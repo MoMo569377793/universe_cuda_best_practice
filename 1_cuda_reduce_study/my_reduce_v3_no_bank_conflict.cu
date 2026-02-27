@@ -22,21 +22,15 @@ __global__ void reduce(float *d_input, float *d_output)
     //     __syncthreads();
     // }
 
-    
-    for(int i = 1; i < blockDim.x; i *= 2)
+    for(int i = blockDim.x / 2; i > 0; i /= 2)
     {
-        if(tid < blockDim.x / (2 * i))
-        {
-            int index = threadIdx.x * 2 * i;
-            shared[index] += shared[index + i];
-        }
-        
-        __syncthreads();
+        if(tid < i)
+            shared[tid] += shared[tid + i];
+        __syncthreads();    
     }
 
     if(tid == 0)
         d_output[blockIdx.x] = shared[tid];
-
 }
 
 bool check(float *out, float *res, int n)
