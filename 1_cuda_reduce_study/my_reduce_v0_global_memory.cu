@@ -42,7 +42,6 @@ __global__ void reduce(float *d_input, float *d_output)
         if(tid % (2 * i) == 0)
             input_begin[tid] += input_begin[tid + i];
         
-        
         __syncthreads();
     }
 
