@@ -8,19 +8,10 @@
 __global__ void reduce(float *d_input, float *d_output)
 {
     __shared__ float shared[THREAD_PER_BLOCK];
-    float *input_begin = d_input + blockDim.x * blockIdx.x;
+    float *input_begin = d_input + blockDim.x * blockIdx.x * 2;
     int tid = threadIdx.x;
-    shared[tid] = input_begin[tid];
+    shared[tid] = input_begin[tid] + input_begin[tid + blockDim.x];
     __syncthreads();
-
-    // for(int i = 1; i < blockDim.x; i *= 2)
-    // {
-    //     int half = blockDim.x / (2 * i);
-    //     if(tid < half)
-    //         shared[tid] += shared[tid + half];
-        
-    //     __syncthreads();
-    // }
 
     for(int i = blockDim.x / 2; i > 0; i /= 2)
     {
@@ -50,7 +41,7 @@ int main()
     float *d_input;
     cudaMalloc((void **)&d_input, N * sizeof(float));
 
-    int block_num = N / THREAD_PER_BLOCK;
+    int block_num = N / (THREAD_PER_BLOCK * 2);
     float *output = (float *)malloc(block_num * sizeof(float));
     float *d_output;
     cudaMalloc((void **)&d_output, block_num * sizeof(float));
@@ -65,9 +56,9 @@ int main()
     for(int i = 0; i < block_num; i++)
     {
         float cur = 0;
-        for(int j = 0; j < THREAD_PER_BLOCK; j++)
+        for(int j = 0; j < 2 * THREAD_PER_BLOCK; j++)
         {
-            cur += input[i * THREAD_PER_BLOCK + j];
+            cur += input[i * 2 * THREAD_PER_BLOCK + j];
         }
         result[i] = cur;
     }
