@@ -13,22 +13,37 @@ __global__ void reduce(float *d_input, float *d_output)
     shared[tid] = input_begin[tid] + input_begin[tid + blockDim.x];
     __syncthreads();
 
-    for(int i = blockDim.x / 2; i > 32; i /= 2)
+    if(THREAD_PER_BLOCK >= 512)
     {
-        if(tid < i)
-            shared[tid] += shared[tid + i];
-        __syncthreads();    
+        if(tid < 256)
+            shared[tid] += shared[tid + 256];
+        __syncthreads();
     }
 
-    // 写法 2
-    if(tid < 32)
+    if(THREAD_PER_BLOCK >= 256)
     {
-        shared[tid] += shared[tid + 32];
-        shared[tid] += shared[tid + 16];
-        shared[tid] += shared[tid + 8];
-        shared[tid] += shared[tid + 4];
-        shared[tid] += shared[tid + 2];
-        shared[tid] += shared[tid + 1];
+        if(tid < 128)
+            shared[tid] += shared[tid + 128];
+        __syncthreads();
+    }
+
+    if(THREAD_PER_BLOCK >= 128)
+    {
+        if(tid < 64)
+            shared[tid] += shared[tid + 64];
+        __syncthreads();
+    }
+    if(THREAD_PER_BLOCK >= 64)
+    {
+        if(tid < 32)
+        {
+            shared[tid] += shared[tid + 32];
+            shared[tid] += shared[tid + 16];
+            shared[tid] += shared[tid + 8];
+            shared[tid] += shared[tid + 4];
+            shared[tid] += shared[tid + 2];
+            shared[tid] += shared[tid + 1];
+        }
     }
 
     if(tid == 0)
