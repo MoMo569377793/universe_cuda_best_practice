@@ -41,3 +41,9 @@ target_link_libraries(my_reduce_v6_completely_unroll PRIVATE CUDA::cudart ${CUDA
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(my_reduce_v6_completely_unroll PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
 endif()
+
+add_executable(my_reduce_v7_muti_add my_reduce_v7_muti_add.cu)
+target_link_libraries(my_reduce_v7_muti_add PRIVATE CUDA::cudart ${CUDA_cublas_LIBRARY})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(my_reduce_v7_muti_add PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+endif()
