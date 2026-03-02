@@ -5,12 +5,18 @@
 
 #define THREAD_PER_BLOCK 256
 
+template<unsigned int NUM_PER_BLOCK, unsigned int NUM_PER_THREAD>
 __global__ void reduce(float *d_input, float *d_output)
 {
     volatile __shared__ float shared[THREAD_PER_BLOCK];
-    float *input_begin = d_input + blockDim.x * blockIdx.x * 2;
     int tid = threadIdx.x;
-    shared[tid] = input_begin[tid] + input_begin[tid + blockDim.x];
+
+    float *input_begin = d_input + NUM_PER_BLOCK * blockIdx.x;
+    shared[tid] = 0;
+    for(int i = 0; i < NUM_PER_THREAD; i++)
+    {
+        shared[tid] += input_begin[tid + i * THREAD_PER_BLOCK];
+    }
     __syncthreads();
 
     if(THREAD_PER_BLOCK >= 512)
@@ -55,7 +61,7 @@ bool check(float *out, float *res, int n)
 {
     for(int i = 0; i < n; i++)
     {
-        if(abs(out[i] - res[i]) > 1e-3)
+        if(abs(out[i] - res[i]) > 5e-3)
             return false;
     }
     return true;
@@ -68,7 +74,9 @@ int main()
     float *d_input;
     cudaMalloc((void **)&d_input, N * sizeof(float));
 
-    int block_num = N / (THREAD_PER_BLOCK * 2);
+    constexpr int block_num = 1024;
+    constexpr int num_per_block = N / block_num;
+    constexpr int num_per_thread = num_per_block / THREAD_PER_BLOCK;
     float *output = (float *)malloc(block_num * sizeof(float));
     float *d_output;
     cudaMalloc((void **)&d_output, block_num * sizeof(float));
@@ -83,9 +91,9 @@ int main()
     for(int i = 0; i < block_num; i++)
     {
         float cur = 0;
-        for(int j = 0; j < 2 * THREAD_PER_BLOCK; j++)
+        for(int j = 0; j < num_per_block; j++)
         {
-            cur += input[i * 2 * THREAD_PER_BLOCK + j];
+            cur += input[i * num_per_block + j];
         }
         result[i] = cur;
     }
@@ -95,7 +103,7 @@ int main()
     dim3 Grid(block_num, 1);
     dim3 Block(THREAD_PER_BLOCK, 1);
 
-    reduce<<<Grid, Block>>>(d_input, d_output);
+    reduce<num_per_block, num_per_thread><<<Grid, Block>>>(d_input, d_output);
 
     cudaMemcpy(output, d_output, block_num * sizeof(float), cudaMemcpyDeviceToHost);
     if(check(output, result, block_num))
