@@ -8,52 +8,40 @@
 template<unsigned int NUM_PER_BLOCK, unsigned int NUM_PER_THREAD>
 __global__ void reduce(float *d_input, float *d_output)
 {
-    volatile __shared__ float shared[THREAD_PER_BLOCK];
     int tid = threadIdx.x;
-
+    float sum = 0.f;
     float *input_begin = d_input + NUM_PER_BLOCK * blockIdx.x;
-    shared[tid] = 0;
+    
     for(int i = 0; i < NUM_PER_THREAD; i++)
-    {
-        shared[tid] += input_begin[tid + i * THREAD_PER_BLOCK];
-    }
-    __syncthreads();
+        sum += input_begin[tid + i * THREAD_PER_BLOCK];
+    
+    sum += __shfl_down_sync(0xffffffff, sum, 16);
+    sum += __shfl_down_sync(0xffffffff, sum, 8);
+    sum += __shfl_down_sync(0xffffffff, sum, 4);
+    sum += __shfl_down_sync(0xffffffff, sum, 2);
+    sum += __shfl_down_sync(0xffffffff, sum, 1);
 
-    if(THREAD_PER_BLOCK >= 512)
-    {
-        if(tid < 256)
-            shared[tid] += shared[tid + 256];
-        __syncthreads();
-    }
+    // 假设一个block中最多只有1024个thread(普遍是这样的)
+    __shared__ float warpLevelSums[32];
+    const int laneId = tid % 32;
+    const int warpId = tid / 32;
 
-    if(THREAD_PER_BLOCK >= 256)
-    {
-        if(tid < 128)
-            shared[tid] += shared[tid + 128];
-        __syncthreads();
-    }
+    if(laneId == 0)
+        warpLevelSums[warpId] = sum;
+    __syncthreads(); // 同步是为了保证所有的warp传输数据完毕再进行下一步的warp内计算
 
-    if(THREAD_PER_BLOCK >= 128)
+    if(warpId == 0)
     {
-        if(tid < 64)
-            shared[tid] += shared[tid + 64];
-        __syncthreads();
-    }
-    if(THREAD_PER_BLOCK >= 64)
-    {
-        if(tid < 32)
-        {
-            shared[tid] += shared[tid + 32];
-            shared[tid] += shared[tid + 16];
-            shared[tid] += shared[tid + 8];
-            shared[tid] += shared[tid + 4];
-            shared[tid] += shared[tid + 2];
-            shared[tid] += shared[tid + 1];
-        }
+        sum = (laneId < blockDim.x / 32) ? warpLevelSums[laneId] : 0.f;
+        sum += __shfl_down_sync(0xffffffff, sum, 16);
+        sum += __shfl_down_sync(0xffffffff, sum, 8);
+        sum += __shfl_down_sync(0xffffffff, sum, 4);
+        sum += __shfl_down_sync(0xffffffff, sum, 2);
+        sum += __shfl_down_sync(0xffffffff, sum, 1);
     }
 
     if(tid == 0)
-    d_output[blockIdx.x] = shared[tid];
+    d_output[blockIdx.x] = sum;
 
 }
 
