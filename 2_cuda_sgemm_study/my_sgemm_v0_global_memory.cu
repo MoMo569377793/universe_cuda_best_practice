@@ -1,7 +1,110 @@
 #include <stdio.h>
 
+#define A(m, n) a[m * N + n]
+#define B(m, n) b[m * N + n]
+
+void random_matrix(int M, int N, float *a)
+{
+    for (int m = 0; m < M; m++)
+        for (int n = 0; n < N; n++)
+#if 1
+            A(m, n) = 2.0 * (float)drand48() - 1.0;
+#else
+            A(m, n) = (m - n) % 3;
+#endif
+}
+
+void cpu_sgemm(float *A_ptr, float *B_ptr, float *C_ptr, const int M, const int N, const int K)
+{
+    for(int m = 0; m < M; m++)
+    {
+        for(int n = 0; n < N; n++)
+        {
+            float tmp = 0.f;
+            for(int k = 0; k < K; k++)
+            {
+                tmp += A_ptr[m * K + k] * B_ptr[k * N + n];
+            }
+            C_ptr[m * N + n] = tmp;
+        }
+    }
+}
+
+float compare_matrices(int M, int N, float *a, float *b)
+{
+    float max_diff = 0.0, diff;
+    int printed = 0;
+
+    for(int m = 0; m < M; m++)
+    {
+        for(int n = 0; n < N; n++)
+        {
+            diff = abs(A(m, n) - B(m, n));
+            max_diff = (diff > max_diff ? diff : max_diff);
+            if(printed == 0)
+                if(max_diff > 0.5f || max_diff < -0.5f)
+                {
+                    printf("\n error: i %d j %d diff %f got %f expect %f\n", m, n, max_diff, A(m, n), B(m, n));
+                    printed = 1;
+                }
+        }
+    }
+
+    return max_diff;
+}
+
 int main()
 {
-    printf("sgemm\n");
+    int m = 2048;
+    int n = 2048;
+    int k = 2048;
+    const size_t mem_size_A = m * k * sizeof(float);
+    const size_t mem_size_B = k * n * sizeof(float);
+    const size_t mem_size_C = m * n * sizeof(float);
+
+    float *matrix_A_host = (float *)malloc(mem_size_A);
+    float *matrix_B_host = (float *)malloc(mem_size_B);
+
+    float *matrix_C_gpu_calc = (float *)malloc(mem_size_C);
+    float *matrix_C_cpu_calc = (float *)malloc(mem_size_C);
+
+    random_matrix(m, k, matrix_A_host);
+    random_matrix(k, n, matrix_B_host);
+    memset(matrix_C_gpu_calc, 0, mem_size_C);
+    memset(matrix_C_cpu_calc, 0, mem_size_C);
+
+    float *matrix_A_device, *matrix_B_device, *matrix_C_device;
+    cudaMalloc((void **)&matrix_A_device, mem_size_A);
+    cudaMalloc((void **)&matrix_B_device, mem_size_B);
+    cudaMalloc((void **)&matrix_C_device, mem_size_C);
+
+    cudaMemcpy(matrix_A_device, matrix_A_host, mem_size_A, cudaMemcpyHostToDevice);
+    cudaMemcpy(matrix_B_device, matrix_B_host, mem_size_B, cudaMemcpyHostToDevice);
+
+    cpu_sgemm(matrix_A_host, matrix_B_host, matrix_C_cpu_calc, m, n, k);
+
+    constexpr int BLOCK = 16;
+    dim3 block(BLOCK, BLOCK);
+    dim3 grid((m + BLOCK - 1) / BLOCK, (n + BLOCK - 1) / BLOCK);
+    // cuda_sgemm<<<grid, block>>>(matrix_A_device, matrix_B_device, matrix_C_device, m, n, k);
+
+    cudaMemcpy(matrix_C_gpu_calc, matrix_C_device, mem_size_C, cudaMemcpyDeviceToHost);
+
+    float diff = compare_matrices(m, n, matrix_C_gpu_calc, matrix_C_cpu_calc);
+    if(diff > 0.5f || diff < -0.5f)
+    {
+        printf("diff too big !\n");
+        exit(-1);
+    }
+
+    free(matrix_A_host);
+    free(matrix_B_host);
+    free(matrix_C_cpu_calc);
+    free(matrix_C_gpu_calc);
+
+    cudaFree(matrix_A_device);
+    cudaFree(matrix_B_device);
+    cudaFree(matrix_C_device);
+    
     return 0;
 }
