@@ -53,11 +53,27 @@ float compare_matrices(int M, int N, float *a, float *b)
     return max_diff;
 }
 
+__global__ void cuda_sgemm(float *A_ptr, float *B_ptr, float *C_ptr, const int M, const int N, const int K)
+{
+    const int row = blockDim.y * blockIdx.y + threadIdx.y;
+    const int col = blockDim.x * blockIdx.x + threadIdx.x;
+    float *A_ptr_start = A_ptr + blockDim.y * blockIdx.y * K;
+    float *B_ptr_start = B_ptr + blockDim.x * blockIdx.x;
+    
+    float temp = 0.f;
+    for(int k = 0; k < K; k++)
+    {
+        // temp += A_ptr[row * K + k] * B_ptr[k * N + col];
+        temp += A_ptr_start[threadIdx.y * K + k] * B_ptr_start[k * N + threadIdx.x];
+    }
+    C_ptr[row * N + col] = temp;
+}
+
 int main()
 {
-    int m = 2048;
-    int n = 2048;
-    int k = 2048;
+    int m = 512;
+    int n = 512;
+    int k = 512;
     const size_t mem_size_A = m * k * sizeof(float);
     const size_t mem_size_B = k * n * sizeof(float);
     const size_t mem_size_C = m * n * sizeof(float);
@@ -85,8 +101,8 @@ int main()
 
     constexpr int BLOCK = 16;
     dim3 block(BLOCK, BLOCK);
-    dim3 grid((m + BLOCK - 1) / BLOCK, (n + BLOCK - 1) / BLOCK);
-    // cuda_sgemm<<<grid, block>>>(matrix_A_device, matrix_B_device, matrix_C_device, m, n, k);
+    dim3 grid((n + BLOCK - 1) / BLOCK, (m + BLOCK - 1) / BLOCK);
+    cuda_sgemm<<<grid, block>>>(matrix_A_device, matrix_B_device, matrix_C_device, m, n, k);
 
     cudaMemcpy(matrix_C_gpu_calc, matrix_C_device, mem_size_C, cudaMemcpyDeviceToHost);
 
@@ -96,6 +112,8 @@ int main()
         printf("diff too big !\n");
         exit(-1);
     }
+    else
+        printf("right\n");
 
     free(matrix_A_host);
     free(matrix_B_host);
