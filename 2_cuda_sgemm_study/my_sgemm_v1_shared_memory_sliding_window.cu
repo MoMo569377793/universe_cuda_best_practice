@@ -53,20 +53,28 @@ float compare_matrices(int M, int N, float *a, float *b)
     return max_diff;
 }
 
+template <unsigned int BLOCK_SIZE>
 __global__ void cuda_sgemm(float *A_ptr, float *B_ptr, float *C_ptr, const int M, const int N, const int K)
 {
     const int row = blockDim.y * blockIdx.y + threadIdx.y;
     const int col = blockDim.x * blockIdx.x + threadIdx.x;
-    
-    __shared__ float a_shared[][];
-    __shared__ float b_shared[][];
-    
+
+    __shared__ float a_shared[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float b_shared[BLOCK_SIZE][BLOCK_SIZE];
 
     float temp = 0.f;
-    for(int k = 0; k < K; k++)
+    for(int s = 0; s < K; s += blockDim.x)
     {
-        temp += A_ptr[row * K + k] * B_ptr[k * N + col];
+        a_shared[threadIdx.y][threadIdx.x] = A_ptr[row * K + threadIdx.x + s];
+        b_shared[threadIdx.y][threadIdx.x] = B_ptr[col + (threadIdx.y + s) * N];
+        __syncthreads();
+        
+        for(int k = 0; k < BLOCK_SIZE; k++)
+            temp += a_shared[threadIdx.y][k] * b_shared[k][threadIdx.x];
+        __syncthreads();
+
     }
+
     C_ptr[row * N + col] = temp;
 }
 
@@ -103,7 +111,7 @@ int main()
     constexpr int BLOCK = 16;
     dim3 block(BLOCK, BLOCK);
     dim3 grid((n + BLOCK - 1) / BLOCK, (m + BLOCK - 1) / BLOCK);
-    cuda_sgemm<<<grid, block>>>(matrix_A_device, matrix_B_device, matrix_C_device, m, n, k);
+    cuda_sgemm<BLOCK><<<grid, block>>>(matrix_A_device, matrix_B_device, matrix_C_device, m, n, k);
 
     cudaMemcpy(matrix_C_gpu_calc, matrix_C_device, mem_size_C, cudaMemcpyDeviceToHost);
 
