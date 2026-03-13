@@ -107,8 +107,7 @@ __global__ void cuda_sgemm(float *A_ptr, float *B_ptr, float *C_ptr, const int M
     float *C_ptr_start = C_ptr + N * blockIdx.y * N_NUM_PER_BLOCK + 
                          blockIdx.x * N_NUM_PER_BLOCK;
     for(int i = 0; i < N_NUM_PER_THREAD; i++)
-        for(int j = 0; j < N_NUM_PER_THREAD; j++)
-            C_ptr_start[N * (ty * M_NUM_PER_THREAD + i) + tx * N_NUM_PER_THREAD + j] = temp[i][j];
+        FETCH_FLOAT4(C_ptr_start[N * (ty * M_NUM_PER_THREAD + i) + tx * N_NUM_PER_THREAD]) = FETCH_FLOAT4(temp[i][0]);
 }
 
 int main()
