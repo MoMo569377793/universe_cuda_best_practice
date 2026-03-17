@@ -65,6 +65,33 @@ __global__ void cuda_sgemm(float *A_ptr, float *B_ptr, float *C_ptr, const int M
 {
     int tx = threadIdx.x;
     int ty = threadIdx.y;
+    
+    float *A_ptr_start = A_ptr + blockIdx.y * M_NUM_PER_BLOCK * K;
+    float *B_ptr_start = B_ptr + blockIdx.x * N_NUM_PER_BLOCK;
+
+    __shared__ a_shared[M_NUM_PER_BLOCK][K_NUM_PER_BLOCK];
+    __shared__ b_shared[K_NUM_PER_BLOCK][N_NUM_PER_BLOCK];
+
+    float a_reg[M_NUM_PER_THREAD] = {0.f};
+    float b_reg[N_NUM_PER_THREAD] = {0.f};
+    float a_load_reg[K_NUM_PER_THREAD] = {0.f};
+    float temp[M_NUM_PER_THREAD][N_NUM_PER_THREAD] = {0.f};
+
+    for(int s = 0; s < K; s += K_NUM_PER_BLOCK)
+    {
+        for(int i = 0; i < M_NUM_PER_THREAD; i++)
+        {
+            // 需要考虑转置
+            FETCH_FLOAT4(a_reg[0]) = FETCH_FLOAT4(A_ptr_start[(ty * M_NUM_PER_THREAD + i) * K + tx * K_NUM_PER_THREAD + s]);
+        }
+
+        for(int i = 0; i < N_NUM_PER_THREAD; i++)
+        {
+            FETCH_FLOAT4(b_reg[0]) = FETCH_FLOAT4(B_ptr_start[(ty * K_NUM_PER_THREAD + i) * N + tx * N_NUM_PER_THREAD + s]);
+        }
+
+
+    }
 
     
 }
