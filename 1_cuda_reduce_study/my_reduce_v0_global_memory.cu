@@ -2,6 +2,7 @@
 #include<cuda.h>
 #include<stdlib.h>
 #include<cuda_runtime.h>
+#include "reduce_runtime_checks.cuh"
 
 #define THREAD_PER_BLOCK 256
 
@@ -48,28 +49,18 @@ __global__ void reduce(float *d_input, float *d_output)
 
 }
 
-bool check(float *out, float *res, int n)
-{
-    for(int i = 0; i < n; i++)
-    {
-        if(abs(out[i] - res[i]) > 1e-3)
-            return false;
-    }
-    return true;
-}
-
 int main()
 {
     // printf("hello reduce");
     const int N = 32 * 1024 * 1024;
     float *input = (float *)malloc(N * sizeof(float));
     float *d_input;
-    cudaMalloc((void **)&d_input, N * sizeof(float));
+    REDUCE_CUDA_CHECK(cudaMalloc((void **)&d_input, N * sizeof(float)));
 
     int block_num = N / THREAD_PER_BLOCK;
     float *output = (float *)malloc(block_num * sizeof(float));
     float *d_output;
-    cudaMalloc((void **)&d_output, block_num * sizeof(float));
+    REDUCE_CUDA_CHECK(cudaMalloc((void **)&d_output, block_num * sizeof(float)));
 
     float *result = (float *)malloc(block_num * sizeof(float));
     for(int i = 0; i < N; i++)
@@ -88,15 +79,18 @@ int main()
         result[i] = cur;
     }
 
-    cudaMemcpy(d_input, input, N * sizeof(float), cudaMemcpyHostToDevice);
+    REDUCE_CUDA_CHECK(cudaMemcpy(d_input, input, N * sizeof(float), cudaMemcpyHostToDevice));
 
     dim3 Grid(block_num, 1);
     dim3 Block(THREAD_PER_BLOCK, 1);
 
     reduce<<<Grid, Block>>>(d_input, d_output);
+    REDUCE_CUDA_LAUNCH_CHECK();
+    REDUCE_CUDA_SYNC_CHECK();
 
-    cudaMemcpy(output, d_output, block_num * sizeof(float), cudaMemcpyDeviceToHost);
-    if(check(output, result, block_num))
+    REDUCE_CUDA_CHECK(cudaMemcpy(output, d_output, block_num * sizeof(float), cudaMemcpyDeviceToHost));
+    const bool results_ok = reduce_checks::results_match(output, result, block_num, 1e-3);
+    if(results_ok)
         printf("the ans is right\n");
     else
     {
@@ -108,8 +102,13 @@ int main()
         printf("\n");
     }
 
-    cudaFree(d_input);
-    cudaFree(d_output);
+    REDUCE_CUDA_CHECK(cudaFree(d_input));
+    REDUCE_CUDA_CHECK(cudaFree(d_output));
+    free(input);
+    free(output);
+    free(result);
 
-    return 0;
+    if(!results_ok)
+        return EXIT_FAILURE;
+    return EXIT_SUCCESS;
 }
